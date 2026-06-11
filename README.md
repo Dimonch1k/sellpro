@@ -1,183 +1,63 @@
-# ПродажPro - Система обліку продажів
+# ПродажPro
 
-Повнофункціональна система управління оптово-роздрібними продажами, покупцями, угодами, знижками та фінансовою аналітикою.
+React + Vite + Supabase застосунок для обліку товарів, покупців, угод, платежів, складських рухів і звітності.
 
-## Технології
+## Що вже підключено
 
-- **Frontend Framework**: React + TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS v4
-- **Backend**: Supabase
-- **Routing**: React Router v7
-- **Charts**: Recharts
-- **Icons**: Lucide React
-- **UI Components**: ShadCN-style components with Radix UI
+- Авторизація через Supabase Auth
+- Автоматичне створення `profiles` через SQL trigger
+- CRUD для категорій, товарів, покупців і правил знижок
+- Створення угод з позиціями, ручною знижкою і підбором `match_discount_rule`
+- Платежі, складські операції, дашборд і звіти на базі ваших view
+- Оновлення профілю і зміна пароля
 
-## Встановлення
+## Env
 
-1. Клонуйте репозиторій
-2. Встановіть залежності:
-   ```bash
-   pnpm install
-   ```
+Створіть файл `.env` на основі [.env.example](/Users/admin/Documents/Git/Dimonch1k/sellpro/.env.example):
 
-3. Створіть файл `.env` на основі `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Налаштуйте Supabase:
-   - Створіть новий проект на [supabase.com](https://supabase.com)
-   - Скопіюйте URL та Anon Key до файлу `.env`
-   - Виконайте міграції бази даних (див. розділ "База даних")
-
-## База даних
-
-Проект використовує наступну схему бази даних:
-
-### Таблиці
-
-1. **profiles** - Профілі користувачів
-2. **product_categories** - Категорії товарів
-3. **products** - Товари
-4. **buyers** - Покупці
-5. **discount_rules** - Правила знижок
-6. **deals** - Угоди
-7. **deal_items** - Позиції угод
-8. **payments** - Платежі
-9. **stock_movements** - Складські операції
-
-### Представлення (Views)
-
-- **dashboard_stats** - Статистика для головної панелі
-- **deal_financials** - Фінансові показники угод
-- **monthly_sales** - Місячні продажі
-
-## Структура проєкту
-
-```
-src/
-  app/
-    App.tsx                 # Головний компонент з роутингом
-  components/
-    layout/                 # Компоненти макету
-      DashboardLayout.tsx
-      PublicLayout.tsx
-      Sidebar.tsx
-      Navbar.tsx
-    shared/                 # Загальні компоненти
-      StatCard.tsx
-      StatusBadge.tsx
-      PriceText.tsx
-      EmptyState.tsx
-      LoadingSpinner.tsx
-    figma/                  # Компоненти для Figma імпорту
-      ImageWithFallback.tsx
-  lib/
-    types.ts               # TypeScript типи
-    constants.ts           # Константи
-    formatters.ts          # Форматування даних
-    supabase.ts            # Клієнт Supabase
-  pages/
-    public/                # Публічні сторінки
-      HomePage.tsx
-      AboutPage.tsx
-      ContactPage.tsx
-    auth/                  # Сторінки авторизації
-      SignInPage.tsx
-      SignUpPage.tsx
-    dashboard/             # Сторінки панелі керування
-      DashboardPage.tsx
-      ProductsPage.tsx
-      CategoriesPage.tsx
-      BuyersPage.tsx
-      DealsPage.tsx
-      DealCreatePage.tsx
-      DiscountRulesPage.tsx
-      PaymentsPage.tsx
-      StockMovementsPage.tsx
-      ReportsPage.tsx
-      ProfilePage.tsx
-```
-
-## Основні функції
-
-### 1. Облік товарів
-- Управління асортиментом
-- Категорії продукції
-- Контроль залишків на складі
-- Гуртові та роздрібні ціни
-
-### 2. Покупці
-- База клієнтів
-- Контактна інформація
-- Історія угод
-- Фінансова статистика
-
-### 3. Угоди
-- Створення оптових та роздрібних угод
-- Множинний вибір товарів
-- Автоматичне застосування знижок
-- Контроль статусів
-
-### 4. Знижки
-- Гнучка система знижок
-- Залежність від обсягу
-- Залежність від суми
-- Ручне коригування
-
-### 5. Платежі
-- Облік надходжень
-- Різні способи оплати
-- Контроль дебіторської заборгованості
-- Часткові оплати
-
-### 6. Складські операції
-- Надходження товарів
-- Продажі (автоматично)
-- Повернення
-- Списання
-- Коригування
-
-### 7. Звіти та аналітика
-- Місячна динаміка
-- Топ покупці
-- Топ товари
-- Дебіторська заборгованість
-- Графіки та діаграми
-
-## Бізнес-логіка
-
-### Ціноутворення
-- Гуртові угоди використовують гуртові ціни
-- Роздрібні угоди використовують роздрібні ціни
-
-### Знижки
-- Автоматичне застосування при виконанні умов
-- Можливість ручного коригування
-- Враховуються при розрахунку прибутку
-
-### Платежі
-- Можливість часткової оплати
-- Борг = Сума угоди - Оплачено
-- Відстеження статусу оплати
-
-### Прибуток
-- Прибуток = Сума продажу - Собівартість - Знижки
-- Собівартість = Гуртова ціна × Кількість
-
-### Складські залишки
-- Автоматичне зменшення при завершенні угоди
-- Попередження при низьких залишках
-- Історія всіх операцій
-
-## Розробка
-
-Запуск dev-сервера:
 ```bash
-pnpm dev
+cp .env.example .env
 ```
 
-## Ліцензія
+Потрібні змінні:
 
-MIT
+```env
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+## Supabase Setup
+
+1. Створіть проєкт у Supabase.
+2. Вставте SQL зі [supabase-schema.sql](/Users/admin/Documents/Git/Dimonch1k/sellpro/supabase-schema.sql) або ваш уже підготовлений SQL-скрипт у SQL Editor і виконайте його.
+3. Увімкніть Email/Password у `Authentication > Providers`.
+4. Додайте URL вашого локального фронтенду в `Authentication > URL Configuration`, якщо використовуєте email confirmation.
+
+Якщо вам потрібен перший `admin`, після реєстрації виконайте в SQL Editor:
+
+```sql
+update public.profiles
+set role = 'admin'
+where id = 'USER_UUID_HERE';
+```
+
+Без цього перший користувач отримає роль `manager`, що достатньо для більшості щоденних операцій, але не для адмін-дій.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+Продакшн-збірка:
+
+```bash
+npm run build
+```
+
+## Важливо
+
+- Для сторінки угод потрібні ваші SQL-функції та view: `match_discount_rule`, `deal_financials`, `monthly_sales`, `dashboard_stats`.
+- При завершенні угоди списання складу робиться через ваші database triggers, тому залишки завжди перевіряються на стороні БД.
+- Якщо RLS повертає помилки прав, перевіряйте роль користувача в `public.profiles`.

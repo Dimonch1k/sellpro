@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { formatShortDate } from '../../lib/formatters';
+import { formatDateTime } from '../../lib/formatters';
 import { MOVEMENT_TYPE_LABELS } from '../../lib/constants';
+import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
+import { supabase } from '../../lib/supabase';
 import type { MovementType } from '../../lib/types';
+import { normalizeErrorMessage, toNumber } from '../../lib/utils';
 
 interface StockMovementRow {
   id: string;
@@ -11,139 +14,217 @@ interface StockMovementRow {
   movement_type: MovementType;
   quantity_delta: number;
   unit: string;
-  reason?: string;
+  reason?: string | null;
 }
 
-const mockMovements: StockMovementRow[] = [
-  {
-    id: '1',
-    created_at: '2024-05-20T10:30:00',
-    product_name: 'Цемент М500',
-    movement_type: 'sale',
-    quantity_delta: -50,
-    unit: 'мішок',
-    reason: 'Угода УГ-2024-001',
-  },
-  {
-    id: '2',
-    created_at: '2024-05-19T14:15:00',
-    product_name: 'Цегла червона',
-    movement_type: 'income',
-    quantity_delta: 5000,
-    unit: 'шт',
-    reason: 'Надходження від постачальника',
-  },
-  {
-    id: '3',
-    created_at: '2024-05-18T09:00:00',
-    product_name: 'Арматура 12мм',
-    movement_type: 'write_off',
-    quantity_delta: -10,
-    unit: 'м',
-    reason: 'Пошкодження при транспортуванні',
-  },
-  {
-    id: '4',
-    created_at: '2024-05-17T16:45:00',
-    product_name: 'Пісок будівельний',
-    movement_type: 'correction',
-    quantity_delta: 5,
-    unit: 'тонна',
-    reason: 'Коригування після інвентаризації',
-  },
-];
+interface ProductOption {
+  id: string;
+  name: string;
+  unit: string;
+}
 
-export function StockMovementsPage() {
+const defaultForm = {
+  product_id: '',
+  movement_type: 'income' as MovementType,
+  quantity_delta: '',
+  reason: '',
+};
+
+interface StockMovementsPageProps {
+  canManage: boolean;
+}
+
+export function StockMovementsPage({ canManage }: StockMovementsPageProps) {
+  const [movements, setMovements] = useState<StockMovementRow[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [showDialog, setShowDialog] = useState(false);
+  const [formData, setFormData] = useState(defaultForm);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const loadData = async () => {
+    setIsLoading(true);
+    const [movementsResult, productsResult] = await Promise.all([
+      supabase
+        .from('stock_movements')
+        .select('id, created_at, movement_type, quantity_delta, reason, product:products(name, unit)')
+        .order('created_at', { ascending: false }),
+      supabase.from('products').select('id, name, unit').eq('is_active', true).order('name', { ascending: true }),
+    ]);
+
+    if (movementsResult.error || productsResult.error) {
+      setErrorMessage(normalizeErrorMessage(movementsResult.error || productsResult.error));
+      setIsLoading(false);
+      return;
+    }
+
+    setMovements(
+      (movementsResult.data ?? []).map((row: any) => ({
+        id: row.id,
+        created_at: row.created_at,
+        product_name: row.product?.name ?? 'Невідомий товар',
+        movement_type: row.movement_type,
+        quantity_delta: toNumber(row.quantity_delta),
+        unit: row.product?.unit ?? 'шт.',
+        reason: row.reason,
+      })),
+    );
+    setProducts((productsResult.data ?? []) as ProductOption[]);
+    setErrorMessage('');
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const handleSave = async () => {
+    if (!canManage) {
+      setErrorMessage('У вас немає прав на створення складських операцій.');
+      return;
+    }
+    setErrorMessage('');
+
+    const quantityDelta = Number(formData.quantity_delta);
+
+    if (!formData.product_id) {
+      setErrorMessage('Оберіть товар.');
+      return;
+    }
+
+    if (Number.isNaN(quantityDelta) || quantityDelta === 0) {
+      setErrorMessage('Кількість має бути числом і не дорівнювати нулю.');
+      return;
+    }
+
+    if (formData.movement_type !== 'correction' && formData.movement_type !== 'write_off' && quantityDelta < 0) {
+      setErrorMessage('Для цього типу операції вкажіть додатне значення кількості.');
+      return;
+    }
+
+    const normalizedQuantity =
+      formData.movement_type === 'write_off'
+        ? -Math.abs(quantityDelta)
+        : formData.movement_type === 'sale'
+        ? -Math.abs(quantityDelta)
+        : quantityDelta;
+
+    setIsSaving(true);
+    const { error } = await supabase.from('stock_movements').insert({
+      product_id: formData.product_id,
+      movement_type: formData.movement_type,
+      quantity_delta: normalizedQuantity,
+      reason: formData.reason.trim() || null,
+    });
+    setIsSaving(false);
+
+    if (error) {
+      setErrorMessage(normalizeErrorMessage(error));
+      return;
+    }
+
+    setShowDialog(false);
+    setFormData(defaultForm);
+    await loadData();
+  };
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Складські операції</h1>
-          <p className="text-gray-600 mt-1">Історія руху товарів на складі</p>
+          <h1 className="app-page-title">Складські операції</h1>
+          <p className="app-page-subtitle">Історія руху товарів на складі</p>
         </div>
-        <button
-          onClick={() => setShowDialog(true)}
-          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-5 h-5" />
-          Додати операцію
-        </button>
+        {canManage ? (
+          <button onClick={() => setShowDialog(true)} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+            <Plus className="w-5 h-5" />
+            Додати операцію
+          </button>
+        ) : null}
       </div>
 
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <h3 className="font-medium text-yellow-900 mb-2">Важливо:</h3>
-        <ul className="text-sm text-yellow-800 space-y-1">
-          <li>• Для надходження вказуйте додатне значення кількості</li>
-          <li>• Для списання вказуйте від'ємне значення кількості</li>
-          <li>• Операції продажу створюються автоматично при завершенні угод</li>
+      {errorMessage ? (
+        <div className="app-alert-error">{errorMessage}</div>
+      ) : null}
+
+      {!canManage ? (
+        <div className="app-alert-info">Режим перегляду: лише адміністратор і менеджер можуть створювати складські операції.</div>
+      ) : null}
+
+      <div className="app-alert-warning">
+        <h3 className="mb-2 font-medium">Важливо</h3>
+        <ul className="space-y-1 text-sm">
+          <li>Продажі створюються автоматично при завершенні угод.</li>
+          <li>Для `write_off` система сама запише від’ємну кількість.</li>
+          <li>Для `correction` можна вказувати як додатне, так і від’ємне число.</li>
         </ul>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="app-table-shell">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="app-table-head">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Дата
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Товар
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Тип операції
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Кількість
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Причина
-              </th>
+              <th className="app-table-head-cell">Дата</th>
+              <th className="app-table-head-cell">Товар</th>
+              <th className="app-table-head-cell">Тип</th>
+              <th className="app-table-head-cell">Кількість</th>
+              <th className="app-table-head-cell">Причина</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {mockMovements.map((movement) => (
-              <tr key={movement.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {formatShortDate(movement.created_at)}
+          <tbody>
+            {movements.map((movement) => (
+              <tr key={movement.id} className="app-table-row">
+                <td className="app-table-cell whitespace-nowrap">{formatDateTime(movement.created_at)}</td>
+                <td className="app-table-cell-strong whitespace-nowrap">{movement.product_name}</td>
+                <td className="app-table-cell whitespace-nowrap">{MOVEMENT_TYPE_LABELS[movement.movement_type]}</td>
+                <td className={`app-table-cell whitespace-nowrap font-medium ${movement.quantity_delta > 0 ? 'app-status-positive' : 'app-status-negative'}`}>
+                  {movement.quantity_delta > 0 ? '+' : ''}
+                  {movement.quantity_delta} {movement.unit}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {movement.product_name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      movement.movement_type === 'income'
-                        ? 'bg-green-100 text-green-800'
-                        : movement.movement_type === 'sale'
-                        ? 'bg-blue-100 text-blue-800'
-                        : movement.movement_type === 'return'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {MOVEMENT_TYPE_LABELS[movement.movement_type]}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <span
-                    className={`font-medium ${
-                      movement.quantity_delta > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
-                    {movement.quantity_delta > 0 ? '+' : ''}
-                    {movement.quantity_delta} {movement.unit}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  {movement.reason || '-'}
-                </td>
+                <td className="app-table-cell">{movement.reason || '-'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {showDialog ? (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="app-panel w-full max-w-lg p-6">
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">Нова складська операція</h2>
+            <div className="space-y-4">
+              <select value={formData.product_id} onChange={(event) => setFormData((current) => ({ ...current, product_id: event.target.value }))} className="app-input">
+                <option value="">Оберіть товар</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+              <select value={formData.movement_type} onChange={(event) => setFormData((current) => ({ ...current, movement_type: event.target.value as MovementType }))} className="app-input">
+                {(['income', 'return', 'write_off', 'correction'] as MovementType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {MOVEMENT_TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+              <input value={formData.quantity_delta} onChange={(event) => setFormData((current) => ({ ...current, quantity_delta: event.target.value }))} type="number" step="0.01" placeholder="Кількість" className="app-input" />
+              <textarea value={formData.reason} onChange={(event) => setFormData((current) => ({ ...current, reason: event.target.value }))} rows={3} placeholder="Причина" className="app-input" />
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowDialog(false)} className="app-btn-secondary flex-1">Скасувати</button>
+              <button onClick={handleSave} disabled={isSaving} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60">
+                {isSaving ? 'Збереження...' : 'Зберегти'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

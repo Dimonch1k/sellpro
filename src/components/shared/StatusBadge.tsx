@@ -12,25 +12,25 @@ export function StatusBadge({ status, type = 'deal' }: StatusBadgeProps) {
       const dealStatus = status as DealStatus;
       switch (dealStatus) {
         case 'completed':
-          return 'bg-green-100 text-green-800 border-green-200';
+          return 'border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-300';
         case 'draft':
-          return 'bg-gray-100 text-gray-800 border-gray-200';
+          return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
         case 'cancelled':
-          return 'bg-red-100 text-red-800 border-red-200';
+          return 'border-red-200 bg-red-100 text-red-800 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300';
         default:
-          return 'bg-gray-100 text-gray-800 border-gray-200';
+          return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
       }
     } else {
       const paymentStatus = status as PaymentStatus;
       switch (paymentStatus) {
         case 'paid':
-          return 'bg-green-100 text-green-800 border-green-200';
+          return 'border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-300';
         case 'partial':
-          return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+          return 'border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-300';
         case 'unpaid':
-          return 'bg-red-100 text-red-800 border-red-200';
+          return 'border-red-200 bg-red-100 text-red-800 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300';
         default:
-          return 'bg-gray-100 text-gray-800 border-gray-200';
+          return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
       }
     }
   };

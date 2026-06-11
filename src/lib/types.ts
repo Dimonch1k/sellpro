@@ -6,59 +6,86 @@ export type PaymentMethod = 'cash' | 'card' | 'bank_transfer' | 'other';
 
 export type MovementType = 'income' | 'sale' | 'return' | 'write_off' | 'correction';
 
-export type PaymentStatus = 'paid' | 'partial' | 'unpaid';
+export type PaymentStatus = 'paid' | 'partial' | 'unpaid' | 'empty';
+export type ThemeMode = 'light' | 'dark';
+
+export type Page =
+  | 'home'
+  | 'signin'
+  | 'signup'
+  | 'dashboard'
+  | 'products'
+  | 'categories'
+  | 'buyers'
+  | 'deals'
+  | 'deals-new'
+  | 'discounts'
+  | 'payments'
+  | 'stock-movements'
+  | 'reports'
+  | 'profile';
 
 export interface Profile {
   id: string;
   full_name: string;
-  phone: string;
+  phone?: string | null;
   avatar_url?: string;
   role: UserRole;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ProductCategory {
   id: string;
   name: string;
   slug: string;
-  description?: string;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Product {
   id: string;
-  category_id: string;
+  category_id?: string | null;
   name: string;
-  sku: string;
+  sku?: string | null;
   wholesale_price: number;
   retail_price: number;
-  description?: string;
+  description?: string | null;
   unit: string;
   stock_qty: number;
   min_stock_qty: number;
-  image_url?: string;
+  image_url?: string | null;
   is_active: boolean;
   category?: ProductCategory;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Buyer {
   id: string;
   company_name: string;
   phone: string;
-  email?: string;
+  email?: string | null;
   contact_person: string;
-  address?: string;
-  tax_code?: string;
-  notes?: string;
+  address: string;
+  tax_code?: string | null;
+  notes?: string | null;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DiscountRule {
   id: string;
   name: string;
-  min_quantity?: number;
-  min_total_amount?: number;
+  min_quantity?: number | null;
+  min_total_amount?: number | null;
   discount_percent: number;
-  description?: string;
+  description?: string | null;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Deal {
@@ -68,12 +95,14 @@ export interface Deal {
   buyer_id: string;
   is_wholesale: boolean;
   status: DealStatus;
-  discount_rule_id?: string;
+  discount_rule_id?: string | null;
   discount_amount: number;
-  note?: string;
-  created_by: string;
+  note?: string | null;
+  created_by?: string | null;
   buyer?: Buyer;
   discount_rule?: DiscountRule;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DealItem {
@@ -85,6 +114,8 @@ export interface DealItem {
   discount_percent: number;
   line_total: number;
   product?: Product;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Payment {
@@ -93,8 +124,10 @@ export interface Payment {
   payment_date: string;
   amount: number;
   method: PaymentMethod;
-  note?: string;
-  created_by: string;
+  note?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface StockMovement {
@@ -104,37 +137,48 @@ export interface StockMovement {
   deal_item_id?: string;
   movement_type: MovementType;
   quantity_delta: number;
-  reason?: string;
-  created_by: string;
+  reason?: string | null;
+  created_by?: string | null;
   created_at: string;
   product?: Product;
 }
 
 export interface DashboardStats {
-  total_revenue: number;
-  total_profit: number;
-  total_debt: number;
+  buyers_count: number;
+  products_count: number;
+  low_stock_count: number;
   deals_count: number;
-  active_buyers: number;
-  products_in_stock: number;
-  low_stock_products: number;
+  completed_deals_count: number;
+  revenue_amount: number;
+  profit_amount: number;
+  debt_amount: number;
 }
 
 export interface DealFinancial {
-  deal_id: string;
+  id: string;
   deal_no: string;
   deal_date: string;
+  buyer_id: string;
   buyer_name: string;
+  is_wholesale: boolean;
   total_amount: number;
   paid_amount: number;
   debt_amount: number;
   profit_amount: number;
+  total_quantity: number;
+  subtotal_amount: number;
+  items_discount_amount: number;
+  manual_discount_amount: number;
   status: DealStatus;
+  payment_status: PaymentStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MonthlySales {
   month: string;
-  revenue: number;
-  profit: number;
-  deals_count: number;
+  completed_deals_count: number;
+  revenue_amount: number;
+  profit_amount: number;
+  debt_amount: number;
 }

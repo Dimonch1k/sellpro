@@ -10,69 +10,67 @@ import {
   User,
   FolderTree,
 } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { hasDashboardRouteAccess } from '../../lib/permissions';
+import type { UserRole } from '../../lib/types';
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Панель керування', page: 'dashboard' },
-  { icon: Package, label: 'Товари', page: 'products' },
-  { icon: FolderTree, label: 'Категорії', page: 'categories' },
-  { icon: Users, label: 'Покупці', page: 'buyers' },
-  { icon: FileText, label: 'Угоди', page: 'deals' },
-  { icon: Percent, label: 'Знижки', page: 'discounts' },
-  { icon: CreditCard, label: 'Платежі', page: 'payments' },
-  { icon: TrendingUp, label: 'Складські операції', page: 'stock-movements' },
-  { icon: BarChart3, label: 'Звіти', page: 'reports' },
+  { icon: LayoutDashboard, label: 'Панель керування', to: '/dashboard', routeKey: 'dashboard' },
+  { icon: Package, label: 'Товари', to: '/dashboard/products', routeKey: 'products' },
+  { icon: FolderTree, label: 'Категорії', to: '/dashboard/categories', routeKey: 'categories' },
+  { icon: Users, label: 'Покупці', to: '/dashboard/buyers', routeKey: 'buyers' },
+  { icon: FileText, label: 'Угоди', to: '/dashboard/deals', routeKey: 'deals' },
+  { icon: Percent, label: 'Знижки', to: '/dashboard/discounts', routeKey: 'discounts' },
+  { icon: CreditCard, label: 'Платежі', to: '/dashboard/payments', routeKey: 'payments' },
+  { icon: TrendingUp, label: 'Складські операції', to: '/dashboard/stock-movements', routeKey: 'stock-movements' },
+  { icon: BarChart3, label: 'Звіти', to: '/dashboard/reports', routeKey: 'reports' },
 ];
 
+const itemClassName = ({ isActive }: { isActive: boolean }) =>
+  `flex w-full items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
+    isActive
+      ? 'bg-blue-600 text-white shadow-sm'
+      : 'text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+  }`;
+
 interface SidebarProps {
-  currentPage: string;
-  onNavigate: (page: string) => void;
+  role: UserRole | null;
 }
 
-export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export function Sidebar({ role }: SidebarProps) {
+  const visibleItems = menuItems.filter((item) => hasDashboardRouteAccess(role, item.routeKey));
+
   return (
-    <div className="w-64 bg-gray-900 text-white flex flex-col h-screen">
-      <div className="p-6 border-b border-gray-800">
+    <div className="flex h-screen w-64 flex-col border-r border-slate-200 bg-slate-100 text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white">
+      <div className="border-b border-slate-200 p-6 dark:border-slate-800">
         <h1 className="text-2xl font-bold">ПродажPro</h1>
-        <p className="text-sm text-gray-400 mt-1">Система обліку продажів</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Система обліку продажів</p>
       </div>
 
       <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-1">
-          {menuItems.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentPage === item.page;
 
             return (
-              <li key={item.page}>
-                <button
-                  onClick={() => onNavigate(item.page)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`}
-                >
+              <li key={item.to}>
+                <NavLink to={item.to} end={item.to === '/dashboard'} className={itemClassName}>
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
-                </button>
+                </NavLink>
               </li>
             );
           })}
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-800">
-        <button
-          onClick={() => onNavigate('profile')}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-            currentPage === 'profile'
-              ? 'bg-blue-600 text-white'
-              : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-          }`}
-        >
-          <User className="w-5 h-5" />
-          <span>Профіль</span>
-        </button>
+      <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+        {hasDashboardRouteAccess(role, 'profile') ? (
+          <NavLink to="/dashboard/profile" className={itemClassName}>
+            <User className="w-5 h-5" />
+            <span>Профіль</span>
+          </NavLink>
+        ) : null}
       </div>
     </div>
   );

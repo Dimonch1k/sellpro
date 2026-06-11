@@ -139,68 +139,144 @@ CREATE INDEX idx_stock_movements_type ON stock_movements(movement_type);
 
 -- Dashboard stats view
 CREATE OR REPLACE VIEW dashboard_stats AS
-SELECT
-  COALESCE(SUM(CASE WHEN d.status = 'completed' THEN di.line_total ELSE 0 END), 0) - COALESCE(SUM(d.discount_amount), 0) AS total_revenue,
-  COALESCE(SUM(CASE WHEN d.status = 'completed' THEN (di.line_total - (di.quantity * p.wholesale_price)) ELSE 0 END), 0) AS total_profit,
-  COALESCE(SUM(
-    CASE WHEN d.status = 'completed'
-    THEN (di.line_total - COALESCE(pay.total_paid, 0))
-    ELSE 0 END
-  ), 0) AS total_debt,
-  COUNT(DISTINCT d.id) FILTER (WHERE d.status != 'cancelled') AS deals_count,
-  COUNT(DISTINCT b.id) FILTER (WHERE b.is_active = TRUE) AS active_buyers,
-  COUNT(DISTINCT pr.id) FILTER (WHERE pr.stock_qty > 0) AS products_in_stock,
-  COUNT(DISTINCT pr.id) FILTER (WHERE pr.stock_qty <= pr.min_stock_qty AND pr.is_active = TRUE) AS low_stock_products
-FROM deals d
-LEFT JOIN deal_items di ON d.id = di.deal_id
-LEFT JOIN products p ON di.product_id = p.id
-LEFT JOIN buyers b ON d.buyer_id = b.id
-LEFT JOIN products pr ON TRUE
-LEFT JOIN (
-  SELECT deal_id, SUM(amount) AS total_paid
+WITH item_totals AS (
+  SELECT
+    d.id AS deal_id,
+    COALESCE(SUM(di.line_total), 0)::numeric(14,2) AS items_total_amount,
+    COALESCE(SUM(di.quantity * di.unit_price), 0)::numeric(14,2) AS subtotal_amount,
+    COALESCE(SUM(di.line_total - (di.quantity * p.wholesale_price)), 0)::numeric(14,2) AS profit_before_manual_discount
+  FROM deals d
+  LEFT JOIN deal_items di ON d.id = di.deal_id
+  LEFT JOIN products p ON di.product_id = p.id
+  GROUP BY d.id
+),
+payment_totals AS (
+  SELECT deal_id, COALESCE(SUM(amount), 0)::numeric(14,2) AS paid_amount
   FROM payments
   GROUP BY deal_id
-) pay ON d.id = pay.deal_id;
+),
+deal_totals AS (
+  SELECT
+    d.id,
+    d.status,
+    COALESCE(it.subtotal_amount, 0)::numeric(14,2) AS subtotal_amount,
+    GREATEST(COALESCE(it.items_total_amount, 0) - COALESCE(d.discount_amount, 0), 0)::numeric(14,2) AS total_amount,
+    (COALESCE(it.profit_before_manual_discount, 0) - COALESCE(d.discount_amount, 0))::numeric(14,2) AS profit_amount,
+    COALESCE(pt.paid_amount, 0)::numeric(14,2) AS paid_amount
+  FROM deals d
+  LEFT JOIN item_totals it ON d.id = it.deal_id
+  LEFT JOIN payment_totals pt ON d.id = pt.deal_id
+)
+SELECT
+  (SELECT COUNT(*) FROM buyers WHERE is_active = TRUE)::bigint AS buyers_count,
+  (SELECT COUNT(*) FROM products WHERE stock_qty > 0)::bigint AS products_count,
+  (SELECT COUNT(*) FROM products WHERE is_active = TRUE AND stock_qty <= min_stock_qty)::bigint AS low_stock_count,
+  COUNT(*) FILTER (WHERE status != 'cancelled')::bigint AS deals_count,
+  COUNT(*) FILTER (WHERE status = 'completed')::bigint AS completed_deals_count,
+  COALESCE(SUM(
+    CASE
+      WHEN status = 'completed' THEN total_amount
+      ELSE 0
+    END
+  ), 0)::numeric(14,2) AS revenue_amount,
+  COALESCE(SUM(
+    CASE
+      WHEN status = 'completed' THEN profit_amount
+      ELSE 0
+    END
+  ), 0)::numeric(14,2) AS profit_amount,
+  COALESCE(SUM(
+    CASE
+      WHEN status = 'completed' THEN GREATEST(total_amount - paid_amount, 0)
+      ELSE 0
+    END
+  ), 0)::numeric(14,2) AS debt_amount
+FROM deal_totals;
 
 -- Deal financials view
 CREATE OR REPLACE VIEW deal_financials AS
 SELECT
-  d.id AS deal_id,
+  d.id,
   d.deal_no,
   d.deal_date,
+  d.buyer_id,
   b.company_name AS buyer_name,
+  d.is_wholesale,
+  COALESCE(SUM(di.quantity), 0)::numeric(14,2) AS total_quantity,
+  COALESCE(SUM(di.quantity * di.unit_price), 0)::numeric(14,2) AS subtotal_amount,
+  COALESCE(SUM((di.quantity * di.unit_price) - di.line_total), 0)::numeric(14,2) AS items_discount_amount,
+  COALESCE(d.discount_amount, 0)::numeric(14,2) AS manual_discount_amount,
   d.status,
-  COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0) AS total_amount,
-  COALESCE(p.total_paid, 0) AS paid_amount,
-  GREATEST(COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0) - COALESCE(p.total_paid, 0), 0) AS debt_amount,
+  (COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0))::numeric(14,2) AS total_amount,
+  COALESCE(p.total_paid, 0)::numeric(14,2) AS paid_amount,
+  GREATEST(COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0) - COALESCE(p.total_paid, 0), 0)::numeric(14,2) AS debt_amount,
   CASE
     WHEN d.status = 'completed' THEN
-      COALESCE(SUM(di.line_total - (di.quantity * pr.wholesale_price)), 0) - COALESCE(d.discount_amount, 0)
+      (COALESCE(SUM(di.line_total - (di.quantity * pr.wholesale_price)), 0) - COALESCE(d.discount_amount, 0))::numeric(14,2)
     ELSE 0
-  END AS profit_amount
+  END::numeric(14,2) AS profit_amount,
+  CASE
+    WHEN COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0) <= 0 THEN 'empty'
+    WHEN COALESCE(p.total_paid, 0) <= 0 THEN 'unpaid'
+    WHEN COALESCE(p.total_paid, 0) >= COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0) THEN 'paid'
+    ELSE 'partial'
+  END AS payment_status,
+  d.discount_rule_id,
+  d.created_by,
+  d.created_at,
+  d.updated_at
 FROM deals d
 LEFT JOIN buyers b ON d.buyer_id = b.id
 LEFT JOIN deal_items di ON d.id = di.deal_id
 LEFT JOIN products pr ON di.product_id = pr.id
 LEFT JOIN (
-  SELECT deal_id, SUM(amount) AS total_paid
+  SELECT deal_id, SUM(amount)::numeric(14,2) AS total_paid
   FROM payments
   GROUP BY deal_id
 ) p ON d.id = p.deal_id
-GROUP BY d.id, d.deal_no, d.deal_date, b.company_name, d.status, d.discount_amount, p.total_paid;
+GROUP BY
+  d.id,
+  d.deal_no,
+  d.deal_date,
+  d.buyer_id,
+  b.company_name,
+  d.is_wholesale,
+  d.status,
+  d.discount_amount,
+  p.total_paid,
+  d.discount_rule_id,
+  d.created_by,
+  d.created_at,
+  d.updated_at;
 
 -- Monthly sales view
 CREATE OR REPLACE VIEW monthly_sales AS
+WITH item_totals AS (
+  SELECT
+    d.id AS deal_id,
+    DATE_TRUNC('month', d.deal_date)::date AS month,
+    (COALESCE(SUM(di.line_total), 0) - COALESCE(d.discount_amount, 0))::numeric(14,2) AS revenue_amount,
+    (COALESCE(SUM(di.line_total - (di.quantity * p.wholesale_price)), 0) - COALESCE(d.discount_amount, 0))::numeric(14,2) AS profit_amount
+  FROM deals d
+  LEFT JOIN deal_items di ON d.id = di.deal_id
+  LEFT JOIN products p ON di.product_id = p.id
+  WHERE d.status = 'completed'
+  GROUP BY d.id, DATE_TRUNC('month', d.deal_date)::date, d.discount_amount
+),
+payment_totals AS (
+  SELECT deal_id, COALESCE(SUM(amount), 0)::numeric(14,2) AS paid_amount
+  FROM payments
+  GROUP BY deal_id
+)
 SELECT
-  TO_CHAR(d.deal_date, 'YYYY-MM') AS month,
-  COALESCE(SUM(di.line_total), 0) - COALESCE(SUM(d.discount_amount), 0) AS revenue,
-  COALESCE(SUM(di.line_total - (di.quantity * p.wholesale_price)), 0) - COALESCE(SUM(d.discount_amount), 0) AS profit,
-  COUNT(DISTINCT d.id) AS deals_count
-FROM deals d
-LEFT JOIN deal_items di ON d.id = di.deal_id
-LEFT JOIN products p ON di.product_id = p.id
-WHERE d.status = 'completed'
-GROUP BY TO_CHAR(d.deal_date, 'YYYY-MM')
+  it.month,
+  COUNT(*)::bigint AS completed_deals_count,
+  COALESCE(SUM(it.revenue_amount), 0)::numeric(14,2) AS revenue_amount,
+  COALESCE(SUM(it.profit_amount), 0)::numeric(14,2) AS profit_amount,
+  COALESCE(SUM(GREATEST(it.revenue_amount - COALESCE(pt.paid_amount, 0), 0)), 0)::numeric(14,2) AS debt_amount
+FROM item_totals it
+LEFT JOIN payment_totals pt ON it.deal_id = pt.deal_id
+GROUP BY it.month
 ORDER BY month DESC;
 
 -- Function to auto-generate deal number
@@ -342,7 +418,9 @@ CREATE POLICY "Admins and managers can manage buyers" ON buyers FOR ALL USING (
 );
 
 -- Policies for discount_rules
-CREATE POLICY "Anyone can view discount rules" ON discount_rules FOR SELECT USING (TRUE);
+CREATE POLICY "Admins and managers can view discount rules" ON discount_rules FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'manager'))
+);
 CREATE POLICY "Admins can manage discount rules" ON discount_rules FOR ALL USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
 );
@@ -360,13 +438,17 @@ CREATE POLICY "Admins and managers can manage deal items" ON deal_items FOR ALL 
 );
 
 -- Policies for payments
-CREATE POLICY "Anyone can view payments" ON payments FOR SELECT USING (TRUE);
+CREATE POLICY "Admins, managers, and accountants can view payments" ON payments FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'manager', 'accountant'))
+);
 CREATE POLICY "Admins, managers, and accountants can manage payments" ON payments FOR ALL USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'manager', 'accountant'))
 );
 
 -- Policies for stock_movements
-CREATE POLICY "Anyone can view stock movements" ON stock_movements FOR SELECT USING (TRUE);
+CREATE POLICY "Admins and managers can view stock movements" ON stock_movements FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'manager'))
+);
 CREATE POLICY "Admins and managers can create stock movements" ON stock_movements FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'manager'))
 );

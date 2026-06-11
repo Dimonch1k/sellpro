@@ -32,6 +32,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   paid: 'Оплачено',
   partial: 'Частково',
   unpaid: 'Не оплачено',
+  empty: 'Порожня',
 };
 
-export const UNITS = ['шт', 'кг', 'л', 'м', 'упак', 'пал'];
+export const UNITS = ['шт.', 'кг', 'л', 'м', 'упак', 'пал', 'ящик', 'комплект'];
