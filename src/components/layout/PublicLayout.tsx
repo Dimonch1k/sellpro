@@ -30,7 +30,7 @@ export function PublicLayout({
 							to='/'
 							className='text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100'
 						>
-							ПродажPro
+							SellPro
 						</Link>
 						<div className='flex flex-wrap items-center gap-3 sm:gap-5'>
 							<nav className='flex items-center gap-4 sm:gap-5'>
